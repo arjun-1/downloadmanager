@@ -19,7 +19,7 @@ object Dependencies {
 
   val circeDerivation = "io.circe" %% "circe-derivation" % Versions.circeDerivation
 
-  val circe = Seq("circe-core", "circe-refined", "circe-literal")
+  val circe = Seq("circe-core", "circe-refined", "circe-literal", "circe-generic")
     .map("io.circe" %% _ % Versions.circe)
 
   val zio = Seq("zio", "zio-test", "zio-test-sbt", "zio-test-magnolia", "zio-macros")
