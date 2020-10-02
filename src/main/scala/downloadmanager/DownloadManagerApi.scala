@@ -1,0 +1,3 @@
+package downloadmanager
+
+object DownloadManagerApi {}
