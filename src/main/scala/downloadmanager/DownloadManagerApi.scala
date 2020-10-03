@@ -15,6 +15,8 @@ import zio.{Has, IO, ZIO, ZLayer}
 @accessible
 object DownloadManagerApi {
 
+  type DownloadManagerApi = Has[Service]
+
   trait Service {
     def addStream(domain: String, startTime: Instant, token: String): IO[DownloadManagerError, Unit]
     def removeStream(domain: String): IO[DownloadManagerError, Unit]
@@ -31,7 +33,7 @@ object DownloadManagerApi {
     ) =>
       new Service {
 
-        def pageAction(domain: String, page: CursorPage) =
+        private def pageAction(domain: String, page: CursorPage) =
           ZIO.foreach(page.tickets)(publishApi.publish(domain, _)) *>
             streamRepo.update(
               domain,
@@ -52,7 +54,8 @@ object DownloadManagerApi {
               streamApi
                 .startFromTime(domain, startTime, token)
                 .mapError(DownloadManagerError.StreamError)
-            _ <- stream.map(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+
+            _ <- stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
           } yield ()
         }
 
@@ -72,7 +75,7 @@ object DownloadManagerApi {
                     streamApi.startFromTime(domain, startTime, token)
                 }
             ).mapError[DownloadManagerError](DownloadManagerError.StreamError)
-            _ <- stream.map(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+            _ <- stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
           } yield ()
 
         def stopStream(domain: String) =

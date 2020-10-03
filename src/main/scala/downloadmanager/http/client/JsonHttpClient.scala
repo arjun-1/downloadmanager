@@ -5,7 +5,7 @@ import sttp.client._
 import sttp.client.circe._
 import sttp.model.Uri
 import zio.macros.accessible
-import zio.{Has, IO, ZLayer}
+import zio.{Has, IO, UIO, ZLayer}
 
 import TaskBackend.TaskBackend
 
@@ -40,7 +40,7 @@ object JsonHttpClient {
 
     new Service {
       def get[T: Decoder](url: Uri, token: String): IO[JsonHttpClientError, T] =
-        send(basicRequest.get(url).auth.bearer(token))
+        UIO(println(url)) *> send(basicRequest.get(url).auth.bearer(token))
     }
   }
 

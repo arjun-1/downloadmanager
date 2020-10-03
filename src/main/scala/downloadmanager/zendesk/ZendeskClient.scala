@@ -39,8 +39,8 @@ object ZendeskClient {
       new Service {
 
         def getTicketsFromCursor(domain: String, cursor: String, token: String) = {
-          val url = show"https://$domain.${config.zendeskCursorUrl}?cursor=$cursor"
-          val uri = Uri.parse(url)
+          val url = show"https://$domain.${config.zendeskCursorUrl}"
+          val uri = Uri.parse(url).map(_.param("cursor", cursor))
 
           for {
             uri <-
@@ -53,14 +53,15 @@ object ZendeskClient {
         }
 
         def getTicketsFromStartTime(domain: String, startTime: Instant, token: String) = {
-          val url = show"https://$domain.${config.zendeskCursorUrl}?start_time=$startTime"
-          val uri = Uri.parse(url)
+          val url = show"https://$domain.${config.zendeskCursorUrl}"
+          val uri = Uri.parse(url).map(_.param("start_time", startTime.getEpochSecond.toString))
 
           for {
             uri <-
               ZIO
                 .fromEither(uri)
                 .mapError[ZendeskClientError](ZendeskClientError.InvalidUrl(url, _))
+
             page <- client.get[CursorPage](uri, token).mapError(ZendeskClientError.ClientError)
           } yield page
         }

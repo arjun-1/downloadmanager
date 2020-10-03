@@ -1,12 +1,14 @@
 package downloadmanager.publish
 
+import cats.instances.int._
 import cats.instances.string._
 import cats.syntax.show._
 import downloadmanager.zendesk.model.Ticket
 import zio.console.Console
-import zio.{UIO, ZLayer}
+import zio.{Has, UIO, ZLayer}
 
 object PublishApi {
+  type PublishApi = Has[Service]
 
   trait Service {
     def publish(domain: String, ticket: Ticket): UIO[Unit]

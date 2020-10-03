@@ -2,7 +2,7 @@ package downloadmanager.streams.repo
 
 import downloadmanager.streams.model.{StreamState, _}
 import zio.macros.accessible
-import zio.{Has, IO, Ref, UIO, ZIO, ZLayer}
+import zio.{Has, IO, Ref, UIO, ULayer, ZIO, ZLayer}
 
 @accessible
 object StreamStateRepo {
@@ -24,7 +24,7 @@ object StreamStateRepo {
     def list: UIO[List[StreamState]]
   }
 
-  val live = ZLayer.fromEffect(
+  val live: ULayer[StreamStateRepo] = ZLayer.fromEffect(
     Ref
       .make(Map[String, StreamState]())
       .map(ref =>
@@ -69,13 +69,6 @@ object StreamStateRepo {
             } yield newState
 
           }
-
-          // def start(domain: String) = update(domain, _.copy(isPaused = false))
-
-          // def stop(domain: String) = update(domain, _.copy(isPaused = true))
-
-          // def incNrOfSeen(domain: String) =
-          //   update(domain, s => s.copy(nrOfTicketsSeen = s.nrOfTicketsSeen + 1))
 
           def list = ref.get.map(_.values.toList)
 

@@ -4,13 +4,14 @@ import java.time.Instant
 
 import downloadmanager.streams.model._
 import downloadmanager.zendesk.ZendeskClient
+import downloadmanager.zendesk.ZendeskClient.ZendeskClient
 import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
 import zio.clock.Clock
 import zio.duration._
 import zio.macros.accessible
-import zio.stm.{TMap, TPromise, ZSTM}
+import zio.stm.{STM, TMap, TPromise, ZSTM}
 import zio.stream.ZStream
-import zio.{Has, IO, UIO, ZLayer}
+import zio.{Has, IO, UIO, URLayer, ZLayer}
 
 @accessible
 object StreamApi {
@@ -34,7 +35,8 @@ object StreamApi {
     def stop(domain: String): IO[StreamApiError, Unit]
   }
 
-  val live = ZLayer.fromServiceM((client: ZendeskClient.Service) =>
+  val live
+      : URLayer[ZendeskClient, StreamApi] = ZLayer.fromServiceM((client: ZendeskClient.Service) =>
     // TMap is a software transactional map, having key domain and value `shouldStop`
     // When streams are created, their value in the map is set to 'false'
     // When streams are stopped, their value in the map is set to 'true', signalling termination to the stream.
@@ -48,21 +50,23 @@ object StreamApi {
       .map(runningStreams =>
         new Service {
 
-          def stop(domain: String) =
-            ZSTM.atomically {
+          def stop(domain: String) = {
+            val promise = ZSTM.atomically {
               for {
                 (_, promise) <-
                   ZSTM.require(StreamApiError.AlreadyStopped(domain))(runningStreams.get(domain))
                 _ <- runningStreams.put(domain, (true, promise))
-                _ <- promise.await
-
-              } yield ()
+              } yield promise
             }
 
-          def shouldStopSignal(domain: String) =
-            runningStreams.get(domain).map(_.map(_._1).getOrElse(false)).commit
+            promise.flatMap(_.await.commit)
 
-          def unfoldStream[S, E, A](
+          }
+
+          private def shouldStopSignal(domain: String) =
+            runningStreams.get(domain).map(_.exists(_._1)).commit
+
+          private def unfoldStream[S, E, A](
               domain: String,
               initialRequest: S,
               processRequest: S => IO[E, Option[(A, S)]]
@@ -71,9 +75,6 @@ object StreamApi {
               ZSTM.whenM(runningStreams.contains(domain))(
                 ZSTM.fail(StreamApiError.AlreadyStarted(domain))
               )
-            // ZSTM.whenM(
-            //   shouldStop.get(domain).map(_.map(x => !x._1).getOrElse(false))
-            // )(ZSTM.fail(StreamApiError.AlreadyStarted(domain)))
 
             val stream =
               ZStream.unfoldM(initialRequest)(s =>
@@ -85,9 +86,9 @@ object StreamApi {
                 )
               )
 
-            // Ensure no 2 streams for the same domain are started in parallel through race conditions,
+            // 1. Ensure no 2 streams for the same domain are started in parallel through race conditions,
             // by running the guard (if statement), and updating the internal map in 1 transaction.
-            // creates the promise to signal stopping of the stream to caller of stop
+            // 2. Creates the promise to signal stopping of the stream to caller of stop
 
             val before =
               (
@@ -100,10 +101,16 @@ object StreamApi {
             // Clean up internal shouldStop state when the stream finishes, prevents memory leak.
             val after =
               (
-                runningStreams.get(domain).map(_.map(_._2.succeed(()))) *>
-                  runningStreams.delete(domain)
+                runningStreams
+                  .get(domain)
+                  .flatMap {
+                    case None =>
+                      STM.unit
+                    case Some((_, promise)) =>
+                      promise.succeed(()).unit
+                  } *> runningStreams.delete(domain)
               ).commit
-            before *> UIO(stream.ensuring(after).throttleShape(1, 10.seconds)(_.size.toLong))
+            before *> UIO(stream.ensuring(after).throttleShape(1, 3.seconds)(_.size.toLong))
           }
 
           def startFromCursor(domain: String, cursor: String, token: String) = {
