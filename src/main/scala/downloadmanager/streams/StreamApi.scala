@@ -5,10 +5,17 @@ import java.time.Instant
 import downloadmanager.streams.model._
 import downloadmanager.zendesk.ZendeskClient
 import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
+import zio.clock.Clock
+import zio.duration._
+import zio.macros.accessible
+import zio.stm.{TMap, TPromise, ZSTM}
 import zio.stream.ZStream
-import zio.{IO, Ref, UIO, ZIO, ZLayer}
+import zio.{Has, IO, UIO, ZLayer}
 
+@accessible
 object StreamApi {
+
+  type StreamApi = Has[Service]
 
   trait Service {
 
@@ -16,38 +23,88 @@ object StreamApi {
         domain: String,
         startTime: Instant,
         token: String
-    ): UIO[ZStream[Any, ZendeskClientError, CursorPage]]
+    ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
 
     def startFromCursor(
         domain: String,
         cursor: String,
         token: String
-    ): UIO[ZStream[Any, ZendeskClientError, CursorPage]]
+    ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
 
     def stop(domain: String): IO[StreamApiError, Unit]
   }
 
   val live = ZLayer.fromServiceM((client: ZendeskClient.Service) =>
-    Ref
-      .make(Map[String, Boolean]())
-      .map(shouldStopRef =>
+    // TMap is a software transactional map, having key domain and value `shouldStop`
+    // When streams are created, their value in the map is set to 'false'
+    // When streams are stopped, their value in the map is set to 'true', signalling termination to the stream.
+    // Subsequently the entry of the stream in the map is removed to prevent a memory leak.
+
+    // Software Transactional Memory (STM) is used, so that no race conditions can occur
+    // when 2 simultaneous request to create a stream are made.
+    TMap
+      .empty[String, (Boolean, TPromise[Nothing, Unit])]
+      .commit
+      .map(runningStreams =>
         new Service {
 
-          def stop(domain: String) = {
-            val guard =
-              ZIO.require(StreamApiError.AlreadyStopped(domain))(
-                shouldStopRef.get.map(_.get(domain))
-              )
+          def stop(domain: String) =
+            ZSTM.atomically {
+              for {
+                (_, promise) <-
+                  ZSTM.require(StreamApiError.AlreadyStopped(domain))(runningStreams.get(domain))
+                _ <- runningStreams.put(domain, (true, promise))
+                _ <- promise.await
 
-            for {
-              _ <- guard
-              _ <- shouldStopRef.update(_ + (domain -> true))
-            } yield ()
-
-          }
+              } yield ()
+            }
 
           def shouldStopSignal(domain: String) =
-            shouldStopRef.get.map(_.get(domain).getOrElse(false))
+            runningStreams.get(domain).map(_.map(_._1).getOrElse(false)).commit
+
+          def unfoldStream[S, E, A](
+              domain: String,
+              initialRequest: S,
+              processRequest: S => IO[E, Option[(A, S)]]
+          ) = {
+            def alreadyStartedGuard =
+              ZSTM.whenM(runningStreams.contains(domain))(
+                ZSTM.fail(StreamApiError.AlreadyStarted(domain))
+              )
+            // ZSTM.whenM(
+            //   shouldStop.get(domain).map(_.map(x => !x._1).getOrElse(false))
+            // )(ZSTM.fail(StreamApiError.AlreadyStarted(domain)))
+
+            val stream =
+              ZStream.unfoldM(initialRequest)(s =>
+                shouldStopSignal(domain).flatMap(shouldStop =>
+                  if (shouldStop)
+                    UIO(None)
+                  else
+                    processRequest(s)
+                )
+              )
+
+            // Ensure no 2 streams for the same domain are started in parallel through race conditions,
+            // by running the guard (if statement), and updating the internal map in 1 transaction.
+            // creates the promise to signal stopping of the stream to caller of stop
+
+            val before =
+              (
+                alreadyStartedGuard *>
+                  TPromise
+                    .make[Nothing, Unit]
+                    .flatMap(promise => runningStreams.put(domain, (false, promise)))
+              ).commit
+
+            // Clean up internal shouldStop state when the stream finishes, prevents memory leak.
+            val after =
+              (
+                runningStreams.get(domain).map(_.map(_._2.succeed(()))) *>
+                  runningStreams.delete(domain)
+              ).commit
+            before *> UIO(stream.ensuring(after).throttleShape(1, 10.seconds)(_.size.toLong))
+          }
 
           def startFromCursor(domain: String, cursor: String, token: String) = {
             final case class RequestState(domain: String, cursor: String, token: String)
@@ -66,19 +123,7 @@ object StreamApi {
 
             val initialRequest = RequestState(domain, cursor, token)
 
-            val stream =
-              ZStream.unfoldM(initialRequest)(s =>
-                shouldStopSignal(domain).flatMap(shouldStop =>
-                  if (shouldStop)
-                    UIO(None)
-                  else
-                    processRequestState(s)
-                )
-              )
-
-            shouldStopRef.update(_ + (domain -> false)) *>
-              UIO(stream.ensuring(shouldStopRef.update(_ - domain)))
-
+            unfoldStream(domain, initialRequest, processRequestState)
           }
 
           def startFromTime(domain: String, startTime: Instant, token: String) = {
@@ -119,21 +164,7 @@ object StreamApi {
 
             val initialRequest = RequestState(domain, startTime, None, token)
 
-            val stream =
-              ZStream.unfoldM(initialRequest)(s =>
-                shouldStopSignal(domain).flatMap(shouldStop =>
-                  if (shouldStop)
-                    UIO(None)
-                  else
-                    processRequestState(s)
-                )
-              )
-
-            // clean up internal shouldStop state when the stream finishes.
-            // Prevents memory leak.
-            shouldStopRef.update(_ + (domain -> false)) *>
-              UIO(stream.ensuring(shouldStopRef.update(_ - domain)))
-
+            unfoldStream(domain, initialRequest, processRequestState)
           }
         }
       )

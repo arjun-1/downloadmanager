@@ -2,17 +2,25 @@ package downloadmanager.streams.repo
 
 import downloadmanager.streams.model.{StreamState, _}
 import zio.macros.accessible
-import zio.{IO, Ref, UIO, ZIO, ZLayer}
+import zio.{Has, IO, Ref, UIO, ZIO, ZLayer}
 
 @accessible
 object StreamStateRepo {
+  type StreamStateRepo = Has[Service]
 
   trait Service {
-    def add(streamState: StreamState): IO[StreamStateRepoError, Unit]
+    def get(domain: String): IO[StreamStateRepoError, StreamState]
+    def add(streamState: StreamState): IO[StreamStateRepoError, StreamState]
     def remove(domain: String): IO[StreamStateRepoError, Unit]
-    def start(domain: String): IO[StreamStateRepoError, Unit]
-    def stop(domain: String): IO[StreamStateRepoError, Unit]
-    def incNrOfSeen(domain: String): IO[StreamStateRepoError, Unit]
+
+    def update(
+        domain: String,
+        newStreamState: StreamState => StreamState
+    ): IO[StreamStateRepoError, StreamState]
+    // def start(domain: String): IO[StreamStateRepoError, StreamState]
+    // def stop(domain: String): IO[StreamStateRepoError, StreamState]
+    // def incNrOfSeen(domain: String): IO[StreamStateRepoError, StreamState]
+    // def updateCursor(domain: String, cursor: String): IO[StreamStateRepoError, StreamState]
     def list: UIO[List[StreamState]]
   }
 
@@ -22,22 +30,26 @@ object StreamStateRepo {
       .map(ref =>
         new Service {
 
+          def get(domain: String) =
+            ZIO.require(StreamStateRepoError.NotFound(domain))(ref.get.map(_.get(domain)))
+
           def add(streamState: StreamState) = {
 
             val stream = ref.get.map(_.get(streamState.domain))
 
             val guard =
-              stream.filterOrFail(_.isEmpty)(StreamStateRepoError.AlreadyExists(streamState.domain))
+              ZIO.whenM(stream.map(_.isDefined))(
+                IO.fail(StreamStateRepoError.AlreadyExists(streamState.domain))
+              )
 
             for {
-              _ <- guard
-              _ <- ref.update(_ + (streamState.domain -> streamState))
-            } yield ()
+              _        <- guard
+              newState <- ref.updateAndGet(_ + (streamState.domain -> streamState))
+            } yield streamState
           }
 
           def remove(domain: String) = {
-            val guard =
-              ZIO.require(StreamStateRepoError.NotFound(domain))(ref.get.map(_.get(domain)))
+            val guard = get(domain)
 
             for {
               _ <- guard
@@ -52,17 +64,18 @@ object StreamStateRepo {
 
             for {
               s <- streamState
-              _ <- ref.update(_ + (domain -> newStreamState(s)))
-            } yield ()
+              newState = newStreamState(s)
+              _ <- ref.update(_ + (domain -> newState))
+            } yield newState
 
           }
 
-          def start(domain: String) = update(domain, _.copy(isPaused = false))
+          // def start(domain: String) = update(domain, _.copy(isPaused = false))
 
-          def stop(domain: String) = update(domain, _.copy(isPaused = true))
+          // def stop(domain: String) = update(domain, _.copy(isPaused = true))
 
-          def incNrOfSeen(domain: String) =
-            update(domain, s => s.copy(nrOfTicketsSeen = s.nrOfTicketsSeen + 1))
+          // def incNrOfSeen(domain: String) =
+          //   update(domain, s => s.copy(nrOfTicketsSeen = s.nrOfTicketsSeen + 1))
 
           def list = ref.get.map(_.values.toList)
 
