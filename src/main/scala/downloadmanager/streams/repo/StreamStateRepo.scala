@@ -24,15 +24,14 @@ object StreamStateRepo {
 
           def add(streamState: StreamState) = {
 
-            val db     = ref.get
-            val stream = db.map(_.get(streamState.domain))
+            val stream = ref.get.map(_.get(streamState.domain))
 
             val guard =
               stream.filterOrFail(_.isEmpty)(StreamStateRepoError.AlreadyExists(streamState.domain))
 
             for {
               _ <- guard
-              _ <- db.map(_ + (streamState.domain -> streamState))
+              _ <- ref.update(_ + (streamState.domain -> streamState))
             } yield ()
           }
 
