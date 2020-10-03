@@ -16,10 +16,8 @@ object Main extends zio.App {
 
   val config = AppConfig.live
 
-  val httpBackend = Blocking.live >>> ZLayer.fromManaged(TaskBackend.live)
-
-  val httpClient = httpBackend >>> JsonHttpClient.live
-
+  val httpBackend   = Blocking.live >>> ZLayer.fromManaged(TaskBackend.live)
+  val httpClient    = httpBackend >>> JsonHttpClient.live
   val zendeskClient = httpClient ++ config >>> ZendeskClient.live
 
   val publishApi = Console.live >>> PublishApi.live

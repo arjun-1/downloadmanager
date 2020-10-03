@@ -65,7 +65,6 @@ object DownloadManagerApi {
 
         def startStream(domain: String) =
           for {
-
             state <- streamRepo.get(domain).mapError(DownloadManagerError.RepoError)
             stream <- (
                 state match {

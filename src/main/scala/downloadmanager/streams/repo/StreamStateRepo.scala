@@ -41,8 +41,8 @@ object StreamStateRepo {
               )
 
             for {
-              _        <- guard
-              newState <- ref.updateAndGet(_ + (streamState.domain -> streamState))
+              _ <- guard
+              _ <- ref.updateAndGet(_ + (streamState.domain -> streamState))
             } yield streamState
           }
 
