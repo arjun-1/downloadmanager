@@ -48,7 +48,7 @@ object Dependencies {
   val endpoints4s = Seq("json-schema-generic", "algebra", "algebra-json-schema")
     .map("org.endpoints4s" %% _ % Versions.endpoints4s)
 
-  val endpoints4sHttp4sServer = "org.endpoints4s" %% "http4s-server" % "2.0.0"
+  val endpoints4sHttp4sServer = "org.endpoints4s" %% "http4s-server" % "3.0.1"
 
   val deps = circe ++ endpoints4s ++ http4s ++ zio ++ zioLogging ++ log4j ++ sttp :+ zioCats :+
     cats :+ newtype :+ circeDerivation :+ pureConfig :+ endpoints4sHttp4sServer

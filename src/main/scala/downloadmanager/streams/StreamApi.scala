@@ -2,16 +2,17 @@ package downloadmanager.streams
 
 import java.time.Instant
 
+import scala.jdk.DurationConverters._
+
+import downloadmanager.AppConfig
 import downloadmanager.streams.model._
 import downloadmanager.zendesk.ZendeskClient
-import downloadmanager.zendesk.ZendeskClient.ZendeskClient
 import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
 import zio.clock.Clock
-import zio.duration._
 import zio.macros.accessible
 import zio.stm.{STM, TMap, TPromise, ZSTM}
 import zio.stream.ZStream
-import zio.{Has, IO, UIO, URLayer, ZLayer}
+import zio.{Has, IO, UIO, ZLayer}
 
 @accessible
 object StreamApi {
@@ -20,34 +21,50 @@ object StreamApi {
 
   trait Service {
 
+    /**
+      * Starts a stream, using a starting time (but uses cursor when available).
+      * Yields an error when a stream is already running for the domain
+      */
+
     def startFromTime(
         domain: String,
         startTime: Instant,
         token: String
     ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
 
+    /**
+      * Starts a stream, using a starting cursor.
+      * Yields an error when a stream is already running for the domain
+      */
     def startFromCursor(
         domain: String,
         cursor: String,
         token: String
     ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
 
+    /**
+      * Stops a running stream.
+      * Completes when the stream is actually stopped
+      */
     def stop(domain: String): IO[StreamApiError, Unit]
   }
 
-  val live
-      : URLayer[ZendeskClient, StreamApi] = ZLayer.fromServiceM((client: ZendeskClient.Service) =>
-    // TMap is a software transactional map, having key domain and value `shouldStop`
-    // When streams are created, their value in the map is set to 'false'
-    // When streams are stopped, their value in the map is set to 'true', signalling termination to the stream.
-    // Subsequently the entry of the stream in the map is removed to prevent a memory leak.
+  type ShouldStop = Boolean
+
+  val live = ZLayer.fromServicesM((client: ZendeskClient.Service, config: AppConfig.Config) =>
+    // Implementation detail:
+    // TMap is a Transactional Map, which we use to represent running streams.
+    // We create a TMap which is keyed by domain, and value tuple of (shouldStop, promise).
+    // `shouldStop` is a boolean flag, signalling to the stream to stop.
+    // `promise` is used to let the stop function be completed, exactly when the stream is stopped.
 
     // Software Transactional Memory (STM) is used, so that no race conditions can occur
-    // when 2 simultaneous request to create a stream are made.
+    // when 2 simultaneous request to create a stream are made. I.e. we are guaranteed to have
+    // a single stream per domain.
     TMap
-      .empty[String, (Boolean, TPromise[Nothing, Unit])]
+      .empty[String, (ShouldStop, TPromise[Nothing, Unit])]
       .commit
-      .map(runningStreams =>
+      .map[Service](runningStreams =>
         new Service {
 
           def stop(domain: String) = {
@@ -66,6 +83,8 @@ object StreamApi {
           private def shouldStopSignal(domain: String) =
             runningStreams.get(domain).map(_.exists(_._1)).commit
 
+          // unfold a stream, using an initial request `intialRequest`,
+          // and creation of next request through `processRequest`
           private def unfoldStream[S, E, A](
               domain: String,
               initialRequest: S,
@@ -88,7 +107,7 @@ object StreamApi {
 
             // 1. Ensure no 2 streams for the same domain are started in parallel through race conditions,
             // by running the guard (if statement), and updating the internal map in 1 transaction.
-            // 2. Creates the promise to signal stopping of the stream to caller of stop
+            // 2. Creates the promise to signal stopping of the stream to caller of `stop` function
 
             val before =
               (
@@ -98,7 +117,8 @@ object StreamApi {
                     .flatMap(promise => runningStreams.put(domain, (false, promise)))
               ).commit
 
-            // Clean up internal shouldStop state when the stream finishes, prevents memory leak.
+            // 1. signal completion to caller of `stop` function
+            // 2. Clean up internal shouldStop state when the stream finishes, prevents memory leak.
             val after =
               (
                 runningStreams
@@ -110,7 +130,14 @@ object StreamApi {
                       promise.succeed(()).unit
                   } *> runningStreams.delete(domain)
               ).commit
-            before *> UIO(stream.ensuring(after).throttleShape(1, 3.seconds)(_.size.toLong))
+            before *>
+              UIO(
+                stream
+                  .ensuring(after)
+                  .throttleShape(config.throttle.count, config.throttle.duration.toJava)(
+                    _.size.toLong
+                  )
+              )
           }
 
           def startFromCursor(domain: String, cursor: String, token: String) = {

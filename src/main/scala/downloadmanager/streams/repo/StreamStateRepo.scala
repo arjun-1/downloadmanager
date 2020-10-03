@@ -17,13 +17,11 @@ object StreamStateRepo {
         domain: String,
         newStreamState: StreamState => StreamState
     ): IO[StreamStateRepoError, StreamState]
-    // def start(domain: String): IO[StreamStateRepoError, StreamState]
-    // def stop(domain: String): IO[StreamStateRepoError, StreamState]
-    // def incNrOfSeen(domain: String): IO[StreamStateRepoError, StreamState]
-    // def updateCursor(domain: String, cursor: String): IO[StreamStateRepoError, StreamState]
     def list: UIO[List[StreamState]]
   }
 
+  // Repository, implemented in memory using a Map as underlying data structure.
+  // Could have been equally well a database repo.
   val live: ULayer[StreamStateRepo] = ZLayer.fromEffect(
     Ref
       .make(Map[String, StreamState]())

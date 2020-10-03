@@ -1,0 +1,14 @@
+<Configuration status="info">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="[%date] %X{correlation-id} [%-5level] %logger{36} - %msg%n"/>
+    </Console>
+  </Appenders>
+
+  <Loggers>
+    <Logger name="snapshotservice" level="info" />
+    <Root level="${env:LOG_LEVEL:-info}">
+      <AppenderRef ref="Console" />
+    </Root>
+  </Loggers>
+</Configuration>

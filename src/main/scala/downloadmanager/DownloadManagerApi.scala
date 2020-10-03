@@ -10,7 +10,7 @@ import downloadmanager.streams.repo.StreamStateRepo
 import downloadmanager.zendesk.model.CursorPage
 import zio.clock.Clock
 import zio.macros.accessible
-import zio.{Has, IO, ZIO, ZLayer}
+import zio.{Has, IO, UIO, ZIO, ZLayer}
 
 @accessible
 object DownloadManagerApi {
@@ -22,6 +22,7 @@ object DownloadManagerApi {
     def removeStream(domain: String): IO[DownloadManagerError, Unit]
     def startStream(domain: String): IO[DownloadManagerError, Unit]
     def stopStream(domain: String): IO[DownloadManagerError, Unit]
+    def listStreams: UIO[List[StreamState]]
   }
 
   val live = ZLayer.fromServices(
@@ -46,7 +47,7 @@ object DownloadManagerApi {
             )
 
         def addStream(domain: String, startTime: Instant, token: String) = {
-          val initialStreamState = StreamState.apply2(domain, startTime, token)
+          val initialStreamState = StreamState.initial(domain, startTime, token)
 
           for {
             _ <- streamRepo.add(initialStreamState).mapError(DownloadManagerError.RepoError)
@@ -54,7 +55,6 @@ object DownloadManagerApi {
               streamApi
                 .startFromTime(domain, startTime, token)
                 .mapError(DownloadManagerError.StreamError)
-
             _ <- stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
           } yield ()
         }
@@ -71,7 +71,7 @@ object DownloadManagerApi {
                 state match {
                   case StreamState(_, token, _, Some(cursor), _, _) =>
                     streamApi.startFromCursor(domain, cursor, token)
-                  case StreamState(domain, token, startTime, _, _, _) =>
+                  case StreamState(domain, token, startTime, None, _, _) =>
                     streamApi.startFromTime(domain, startTime, token)
                 }
             ).mapError[DownloadManagerError](DownloadManagerError.StreamError)
@@ -84,6 +84,8 @@ object DownloadManagerApi {
               .update(domain, _.copy(isPaused = true))
               .mapError(DownloadManagerError.RepoError)
               .unit
+
+        def listStreams = streamRepo.list
 
       }
   )

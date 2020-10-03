@@ -32,7 +32,7 @@ wartremoverErrors in (Test, compile) --= Seq(Wart.PublicInference)
 
 scalacOptions ++=
   Seq(
-    // "-Xfatal-warnings",
+    "-Xfatal-warnings",
     "-encoding",
     "utf-8",
     "-Yrangepos",
