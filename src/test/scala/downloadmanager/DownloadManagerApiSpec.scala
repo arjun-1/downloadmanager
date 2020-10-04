@@ -1,7 +1,6 @@
 package downloadmanager
 
 import downloadmanager.streams.StreamStateRepo
-import downloadmanager.streams.model.StreamState
 import downloadmanager.testcases._
 import zio.duration._
 import zio.test.Assertion._
@@ -37,7 +36,7 @@ object DownloadManagerApiSpec extends DefaultRunnableSpec {
           } yield state
 
         assertM(result.provideLayer(downloadManagerApi ++ streamRepo ++ TestClock.default))(
-          equalTo(StreamState(domain, token, instant, None, false, 1))
+          equalTo(streamState2)
         )
       } @@ TestAspect.nonFlaky,
       //
