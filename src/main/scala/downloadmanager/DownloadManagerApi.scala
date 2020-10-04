@@ -7,9 +7,10 @@ import downloadmanager.publish.PublishApi
 import downloadmanager.streams.StreamApi
 import downloadmanager.streams.model.StreamState
 import downloadmanager.streams.repo.StreamStateRepo
-import downloadmanager.zendesk.model.CursorPage
+import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
 import zio.clock.Clock
 import zio.macros.accessible
+import zio.stream.ZStream
 import zio.{Has, IO, UIO, ZIO, ZLayer}
 
 @accessible
@@ -46,6 +47,11 @@ object DownloadManagerApi {
                 )
             )
 
+        private def runStream(
+            domain: String,
+            stream: ZStream[Clock, ZendeskClientError, CursorPage]
+        ) = stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+
         def addStream(domain: String, startTime: Instant, token: String) = {
           val initialStreamState = StreamState.initial(domain, startTime, token)
 
@@ -55,7 +61,7 @@ object DownloadManagerApi {
               streamApi
                 .startFromTime(domain, startTime, token)
                 .mapError(DownloadManagerError.StreamError)
-            _ <- stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+            _ <- runStream(domain, stream)
           } yield ()
         }
 
@@ -74,7 +80,7 @@ object DownloadManagerApi {
                     streamApi.startFromTime(domain, startTime, token)
                 }
             ).mapError[DownloadManagerError](DownloadManagerError.StreamError)
-            _ <- stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+            _ <- runStream(domain, stream)
           } yield ()
 
         def stopStream(domain: String) =

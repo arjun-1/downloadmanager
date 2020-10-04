@@ -7,10 +7,10 @@ import downloadmanager.publish.PublishApi
 import downloadmanager.streams.StreamApi
 import downloadmanager.streams.repo.StreamStateRepo
 import downloadmanager.zendesk.ZendeskClient
+import zio.ZLayer
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.console._
-import zio.{Has, ZLayer}
 
 object Main extends zio.App {
 
@@ -24,8 +24,8 @@ object Main extends zio.App {
   val streamApi  = zendeskClient ++ config >>> StreamApi.live
   val streamRepo = StreamStateRepo.live
 
-  val downloadManager: ZLayer[Any, Throwable, Has[DownloadManagerApi.Service]] =
-    streamApi ++ streamRepo ++ publishApi ++ Clock.live ++ Console.live >>> DownloadManagerApi.live
+  val downloadManager = streamApi ++ streamRepo ++ publishApi ++ Clock.live ++ Console.live >>>
+    DownloadManagerApi.live
 
   val program = Server.serve.provideCustomLayer(downloadManager ++ config ++ Blocking.live)
 

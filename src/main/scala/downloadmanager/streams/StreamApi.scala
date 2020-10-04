@@ -47,6 +47,14 @@ object StreamApi {
       * Completes when the stream is actually stopped
       */
     def stop(domain: String): IO[StreamApiError, Unit]
+
+    /**
+      * We could also have had a function which idempotently starts a stream,
+      * i.e. if there is a running stream stop it and start a new one,
+      * or start a new one if no stream was running.
+      * Not implemented due to time constraints.
+      */
+    // def restartFromTime(domain: String, startTIme: Instant, token: String)
   }
 
   type ShouldStop = Boolean
@@ -55,7 +63,7 @@ object StreamApi {
     // Implementation detail:
     // TMap is a Transactional Map, which we use to represent running streams.
     // We create a TMap which is keyed by domain, and value tuple of (shouldStop, promise).
-    // `shouldStop` is a boolean flag, signalling to the stream to stop.
+    // `shouldStop` is a boolean flag, signalling the stream to stop.
     // `promise` is used to let the stop function be completed, exactly when the stream is stopped.
 
     // Software Transactional Memory (STM) is used, so that no race conditions can occur
@@ -80,24 +88,23 @@ object StreamApi {
 
           }
 
-          private def shouldStopSignal(domain: String) =
-            runningStreams.get(domain).map(_.exists(_._1)).commit
-
           // unfold a stream, using an initial request `intialRequest`,
           // and creation of next request through `processRequest`
           private def unfoldStream[S, E, A](
               domain: String,
               initialRequest: S,
               processRequest: S => IO[E, Option[(A, S)]]
-          ) = {
+          ): IO[StreamApiError.AlreadyStarted, ZStream[Clock, E, A]] = {
             def alreadyStartedGuard =
               ZSTM.whenM(runningStreams.contains(domain))(
                 ZSTM.fail(StreamApiError.AlreadyStarted(domain))
               )
 
+            def shouldStopSignal = runningStreams.get(domain).map(_.exists(_._1)).commit
+
             val stream =
               ZStream.unfoldM(initialRequest)(s =>
-                shouldStopSignal(domain).flatMap(shouldStop =>
+                shouldStopSignal.flatMap(shouldStop =>
                   if (shouldStop)
                     UIO(None)
                   else
@@ -106,30 +113,28 @@ object StreamApi {
               )
 
             // 1. Ensure no 2 streams for the same domain are started in parallel through race conditions,
-            // by running the guard (if statement), and updating the internal map in 1 transaction.
+            // by running the guard (predicate), and updating the internal map in 1 transaction.
             // 2. Creates the promise to signal stopping of the stream to caller of `stop` function
-
-            val before =
-              (
-                alreadyStartedGuard *>
-                  TPromise
-                    .make[Nothing, Unit]
-                    .flatMap(promise => runningStreams.put(domain, (false, promise)))
-              ).commit
+            val before = ZSTM.atomically(
+              alreadyStartedGuard *>
+                TPromise
+                  .make[Nothing, Unit]
+                  .flatMap(promise => runningStreams.put(domain, (false, promise)))
+            )
 
             // 1. signal completion to caller of `stop` function
-            // 2. Clean up internal shouldStop state when the stream finishes, prevents memory leak.
-            val after =
-              (
-                runningStreams
-                  .get(domain)
-                  .flatMap {
-                    case None =>
-                      STM.unit
-                    case Some((_, promise)) =>
-                      promise.succeed(()).unit
-                  } *> runningStreams.delete(domain)
-              ).commit
+            // 2. Clean up internal runningStreams state when the stream finishes, prevents memory leak.
+            val after = ZSTM.atomically(
+              runningStreams
+                .get(domain)
+                .flatMap {
+                  case None =>
+                    STM.unit
+                  case Some((_, promise)) =>
+                    promise.succeed(()).unit
+                } *> runningStreams.delete(domain)
+            )
+
             before *>
               UIO(
                 stream
@@ -152,7 +157,6 @@ object StreamApi {
                   val newRequestState = requestState.copy(cursor = newCursor)
 
                   Some(page -> newRequestState)
-
                 }
 
             val initialRequest = RequestState(domain, cursor, token)
@@ -180,7 +184,6 @@ object StreamApi {
                       val newRequestState = rs.copy(cursor = Some(newCursor))
 
                       Some(page -> newRequestState)
-
                     }
                 // previous request did not yield a next cursor ptr
                 case rs @ RequestState(domain, startTime, None, token) =>
@@ -192,7 +195,6 @@ object StreamApi {
                       val newRequestState = rs.copy(cursor = newCursor)
 
                       Some(page -> newRequestState)
-
                     }
               }
 
