@@ -2,6 +2,7 @@ package downloadmanager.http.server.routes
 
 import scala.util.control.NoStackTrace
 
+import cats.syntax.show._
 import downloadmanager.DownloadManagerApi.DownloadManagerApi
 import downloadmanager.http.server.endpoints.{DownloadManagerEndpoints, Http4sEndpointsRIO}
 import downloadmanager.{DownloadManagerApi, DownloadManagerError}
@@ -23,7 +24,7 @@ object DownloadManagerRoutes {
       err match {
         // due to time constraints, we consider all errors to be user errors (4xx)
         case _ =>
-          UIO(Left(Invalid(s"error: $err")))
+          UIO(Left(Invalid(show"error: $err")))
       }
 
     val addStreamEndpoint = addStream.implementedByEffect {

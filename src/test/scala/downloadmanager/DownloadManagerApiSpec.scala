@@ -16,8 +16,7 @@ object DownloadManagerApiSpec extends DefaultRunnableSpec {
     suite("DownloadManagerApi")(
       testM("elements of added stream should be published") {
         import TestCase1._
-        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi ++ TestClock.default >>>
-          DownloadManagerApi.live
+        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi >>> DownloadManagerApi.live
 
         val result = DownloadManagerApi
           .addStream(domain, instant, token)
@@ -28,8 +27,7 @@ object DownloadManagerApiSpec extends DefaultRunnableSpec {
       //
       testM("stream should persist its state") {
         import TestCase1._
-        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi ++ TestClock.default >>>
-          DownloadManagerApi.live
+        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi >>> DownloadManagerApi.live
 
         val result =
           for {
@@ -45,8 +43,7 @@ object DownloadManagerApiSpec extends DefaultRunnableSpec {
       //
       testM("a stopped stream should be resumed from its latest offset - time") {
         import TestCase1._
-        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi ++ TestClock.default >>>
-          DownloadManagerApi.live
+        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi >>> DownloadManagerApi.live
 
         val result =
           for {
@@ -60,8 +57,7 @@ object DownloadManagerApiSpec extends DefaultRunnableSpec {
       //
       testM("a stopped stream should be resumed from its latest offset - cursor") {
         import TestCase2._
-        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi ++ TestClock.default >>>
-          DownloadManagerApi.live
+        val downloadManagerApi = streamRepo ++ streamApi ++ publishApi >>> DownloadManagerApi.live
 
         val result =
           for {
