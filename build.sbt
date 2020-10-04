@@ -18,17 +18,9 @@ testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
 addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full)
 
-val excludedWarts = Seq(
-  Wart.Any,
-  Wart.Nothing,
-  Wart.StringPlusAny,
-  Wart.ImplicitParameter,
-  Wart.ImplicitConversion,
-  Wart.PublicInference
-)
+val excludedWarts = Seq(Wart.Any, Wart.Nothing, Wart.PublicInference)
 
 wartremoverErrors in (Compile, compile) ++= Warts.allBut(excludedWarts: _*)
-wartremoverErrors in (Test, compile) --= Seq(Wart.PublicInference)
 
 scalacOptions ++=
   Seq(
