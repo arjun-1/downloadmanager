@@ -3,18 +3,18 @@ import sbt._
 object Dependencies {
 
   object Versions {
-    val http4s          = "0.21.6"
-    val zio             = "1.0.0"
-    val sttp            = "2.2.3"
+    val http4s          = "0.21.7"
+    val zio             = "1.0.1"
+    val sttp            = "2.2.9"
     val circe           = "0.13.0"
     val log4j           = "2.13.3"
     val endpoints4s     = "1.1.0"
-    val zioLogging      = "0.4.0"
+    val zioLogging      = "0.5.2"
     val newtype         = "0.4.4"
-    val cats            = "2.1.1"
+    val cats            = "2.2.0"
     val circeDerivation = "0.13.0-M4"
-    val zioCats         = "2.1.4.0"
-    val pureConfig      = "0.13.0"
+    val zioCats         = "2.2.0.0"
+    val pureConfig      = "0.14.0"
   }
 
   val circeDerivation = "io.circe" %% "circe-derivation" % Versions.circeDerivation
