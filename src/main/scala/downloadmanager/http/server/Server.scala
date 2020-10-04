@@ -18,11 +18,13 @@ object Server {
   type ServerEnv = Blocking with DownloadManagerApi with AppConfig
 
   def httpApp[R <: ServerEnv] =
-    for {
-      staticRoutes <- OpenApiRoutes.make[R]
-    } yield Logger.httpApp[RIO[R, *]](logHeaders = false, logBody = false)(
-      Router("/" -> (staticRoutes <+> DownloadManagerRoutes[R])).orNotFound
-    )
+    OpenApiRoutes
+      .make[R]
+      .map(openApiRoutes =>
+        Logger.httpApp[RIO[R, *]](logHeaders = false, logBody = false)(
+          Router("/" -> (openApiRoutes <+> DownloadManagerRoutes[R])).orNotFound
+        )
+      )
 
   def serve[R <: ServerEnv with ZEnv] =
     for {
