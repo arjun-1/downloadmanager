@@ -14,14 +14,16 @@ import zio.console._
 
 object Main extends zio.App {
 
-  val config = AppConfig.live
+  val config         = AppConfig.live
+  val throttleConfig = config >>> ZLayer.fromService(_.throttle)
 
   val httpBackend   = Blocking.live >>> ZLayer.fromManaged(TaskBackend.live)
   val httpClient    = httpBackend >>> JsonHttpClient.live
   val zendeskClient = httpClient ++ config >>> ZendeskClient.live
 
   val publishApi = Console.live >>> PublishApi.live
-  val streamApi  = zendeskClient ++ config >>> StreamApi.live
+
+  val streamApi  = zendeskClient ++ throttleConfig >>> StreamApi.live
   val streamRepo = StreamStateRepo.live
 
   val downloadManager = streamApi ++ streamRepo ++ publishApi ++ Clock.live ++ Console.live >>>
