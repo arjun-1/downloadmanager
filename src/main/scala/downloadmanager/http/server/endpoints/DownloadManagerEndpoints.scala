@@ -17,7 +17,7 @@ trait DownloadManagerEndpoints
   private val basePath = path / "streams"
 
   val addStream: Endpoint[(String, AddStreamReq), Either[Invalid, Unit]] = endpoint(
-    post(basePath / segment[String]("domain") / "add", jsonRequest[AddStreamReq]),
+    post(basePath / segment[String]("domain"), jsonRequest[AddStreamReq]),
     badRequest().orElse(ok(emptyResponse)),
     EndpointDocs().withSummary("Add a stream".some)
   )

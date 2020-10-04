@@ -14,7 +14,7 @@ import zio.test.environment.TestClock
 import zio.test.{DefaultRunnableSpec, _}
 import zio.{Task, ZLayer}
 
-object StreamStateApiSpec extends DefaultRunnableSpec {
+object StreamApiSpec extends DefaultRunnableSpec {
 
   def config = {
     import scala.concurrent.duration._
@@ -48,7 +48,7 @@ object StreamStateApiSpec extends DefaultRunnableSpec {
 
   def spec =
     suite("StreamApi")(
-      testM("no race conditions in start - enforces max 1 stream per domain") {
+      testM("no race conditions should be in start - enforces max 1 stream per domain") {
 
         val start1 = StreamApi.startFromTime(domain, Instant.ofEpochSecond(0), token)
         val start2 = StreamApi.startFromTime(domain, Instant.ofEpochSecond(1), token)
@@ -56,7 +56,7 @@ object StreamStateApiSpec extends DefaultRunnableSpec {
         assertM(start1.zipPar(start2).run)(fails(equalTo(StreamApiError.AlreadyStarted(domain))))
       }.provideLayer(streamApiStubbed(identity)) @@ TestAspect.nonFlaky,
       //
-      testM("no race conditions in stop") {
+      testM("no race conditions should be in stop") {
         val streamApi = streamApiStubbed(_.whenAnyRequest.thenRespond(cursorPage))
 
         val start =
