@@ -94,7 +94,7 @@ object StreamApi {
 
             }
 
-            // unfold a stream, using an initial request `intialRequest`,
+            // unfold a stream, using an initial request `initialRequest`,
             // and creation of next request through `processRequest`
             private def unfoldStream[S, A](
                 domain: String,
@@ -164,7 +164,7 @@ object StreamApi {
 
               def processRequestState(requestState: RequestState) =
                 requestState match {
-                  // previous request succesfully yielded a next cursor ptr
+                  // previous request successfully yielded a next cursor ptr
                   case rs @ RequestState(domain, _, Some(cursor), token) =>
                     client
                       .getTicketsFromCursor(domain, cursor, token)

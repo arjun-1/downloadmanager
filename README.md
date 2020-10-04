@@ -51,6 +51,7 @@ There are some improvements which could have been implemented given more time:
 * As mentioned above, endpoints to idempotently start new streams.
 * `error` could be part of the `StreamState`. I.e. when a stream fails, it is stopped but not due to a user command.
   This field would be optional and show the error status. A stream which was stopped due to an error, could be restarted like a regular stopped stream.
+* New types <https://github.com/estatico/scala-newtype>, so we don't mix up parameters being e.g. `String` (like `token` and `domain`).
 
 ## Stack
 * <https://zio.dev/> effect management and streams
