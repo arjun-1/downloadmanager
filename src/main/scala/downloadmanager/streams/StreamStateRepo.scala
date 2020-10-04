@@ -1,8 +1,8 @@
-package downloadmanager.streams.repo
+package downloadmanager.streams
 
 import downloadmanager.streams.model.{StreamState, _}
+import zio._
 import zio.macros.accessible
-import zio.{Has, IO, Ref, UIO, ULayer, ZIO, ZLayer}
 
 @accessible
 object StreamStateRepo {

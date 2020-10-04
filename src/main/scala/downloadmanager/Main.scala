@@ -4,8 +4,7 @@ import cats.syntax.show._
 import downloadmanager.http.client.{JsonHttpClient, TaskBackend}
 import downloadmanager.http.server.Server
 import downloadmanager.publish.PublishApi
-import downloadmanager.streams.StreamApi
-import downloadmanager.streams.repo.StreamStateRepo
+import downloadmanager.streams.{StreamApi, StreamStateRepo}
 import downloadmanager.zendesk.ZendeskClient
 import zio.ZLayer
 import zio.blocking.Blocking

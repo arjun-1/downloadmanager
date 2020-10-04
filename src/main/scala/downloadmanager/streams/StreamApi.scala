@@ -25,7 +25,6 @@ object StreamApi {
       * Starts a stream, using a starting time (but uses cursor when available).
       * Yields an error when a stream is already running for the domain
       */
-
     def startFromTime(
         domain: String,
         startTime: Instant,
@@ -45,7 +44,7 @@ object StreamApi {
     /**
       * Stops a running stream.
       * Completes when the stream is actually stopped. Note that this means
-      * the stream must be started to be consumed, before the returned effect complets.
+      * the stream must be started to be consumed, before the returned effect completes.
       */
     def stop(domain: String): IO[StreamApiError, Unit]
 

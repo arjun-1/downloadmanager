@@ -4,9 +4,8 @@ import java.time.Instant
 
 import downloadmanager.DownloadManagerError
 import downloadmanager.publish.PublishApi
-import downloadmanager.streams.StreamApi
 import downloadmanager.streams.model.StreamState
-import downloadmanager.streams.repo.StreamStateRepo
+import downloadmanager.streams.{StreamApi, StreamStateRepo}
 import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
 import zio.clock.Clock
 import zio.macros.accessible
@@ -41,7 +40,7 @@ object DownloadManagerApi {
               domain,
               s =>
                 s.copy(
-                  cursor = page.after_cursor,
+                  cursor = page.after_cursor.orElse(s.cursor),
                   nrOfTicketsSeen = s.nrOfTicketsSeen + page.tickets.length,
                   isPaused = false
                 )
@@ -66,8 +65,9 @@ object DownloadManagerApi {
         }
 
         def removeStream(domain: String) =
-          streamApi.stop(domain).mapError[DownloadManagerError](DownloadManagerError.StreamError) *>
-            streamRepo.remove(domain).mapError(DownloadManagerError.RepoError)
+          // a stream might have been stopped before. If so, ignore the error of already being stopped
+          streamApi.stop(domain).ignore *>
+            streamRepo.remove(domain).mapError[DownloadManagerError](DownloadManagerError.RepoError)
 
         def startStream(domain: String) =
           for {

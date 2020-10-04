@@ -1,7 +1,7 @@
 package downloadmanager
 
+import downloadmanager.streams.StreamStateRepo
 import downloadmanager.streams.model.StreamState
-import downloadmanager.streams.repo.StreamStateRepo
 import downloadmanager.testcases._
 import zio.duration._
 import zio.test.Assertion._

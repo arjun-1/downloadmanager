@@ -1,7 +1,6 @@
 package downloadmanager.streams
 
 import downloadmanager.streams.model.StreamStateRepoError
-import downloadmanager.streams.repo.StreamStateRepo
 import downloadmanager.testcases._
 import zio.test.Assertion._
 import zio.test._
