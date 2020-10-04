@@ -36,7 +36,7 @@ object StreamApiSpec extends DefaultRunnableSpec {
     val httpClient           = ZLayer.succeed(backend) >>> JsonHttpClient.live
     val zendeskClient        = httpClient ++ config >>> ZendeskClient.live
 
-    zendeskClient ++ throttleConfig >>> StreamApi.live
+    zendeskClient ++ throttleConfig ++ TestClock.default >>> StreamApi.live
   }
 
   val domain     = "domain"

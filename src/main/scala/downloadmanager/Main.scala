@@ -22,10 +22,10 @@ object Main extends zio.App {
 
   val publishApi = Console.live >>> PublishApi.live
 
-  val streamApi  = zendeskClient ++ throttleConfig >>> StreamApi.live
+  val streamApi  = zendeskClient ++ throttleConfig ++ Clock.live >>> StreamApi.live
   val streamRepo = StreamStateRepo.live
 
-  val downloadManager = streamApi ++ streamRepo ++ publishApi ++ Clock.live ++ Console.live >>>
+  val downloadManager = streamApi ++ streamRepo ++ publishApi ++ Console.live >>>
     DownloadManagerApi.live
 
   val program = Server.serve.provideCustomLayer(downloadManager ++ config ++ Blocking.live)

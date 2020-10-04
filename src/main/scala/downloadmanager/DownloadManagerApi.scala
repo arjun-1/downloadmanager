@@ -7,9 +7,8 @@ import downloadmanager.publish.PublishApi
 import downloadmanager.streams.model.StreamState
 import downloadmanager.streams.{StreamApi, StreamStateRepo}
 import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
-import zio.clock.Clock
 import zio.macros.accessible
-import zio.stream.ZStream
+import zio.stream.Stream
 import zio.{Has, IO, UIO, ZIO, ZLayer}
 
 @accessible
@@ -29,8 +28,7 @@ object DownloadManagerApi {
     (
         streamApi: StreamApi.Service,
         streamRepo: StreamStateRepo.Service,
-        publishApi: PublishApi.Service,
-        clock: Clock.Service
+        publishApi: PublishApi.Service
     ) =>
       new Service {
 
@@ -46,10 +44,8 @@ object DownloadManagerApi {
                 )
             )
 
-        private def runStream(
-            domain: String,
-            stream: ZStream[Clock, ZendeskClientError, CursorPage]
-        ) = stream.tap(pageAction(domain, _)).runDrain.provide(Has(clock)).fork
+        private def runStream(domain: String, stream: Stream[ZendeskClientError, CursorPage]) =
+          stream.tap(pageAction(domain, _)).runDrain.fork
 
         def addStream(domain: String, startTime: Instant, token: String) = {
           val initialStreamState = StreamState.initial(domain, startTime, token)

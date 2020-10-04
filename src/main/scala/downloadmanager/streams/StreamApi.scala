@@ -11,7 +11,7 @@ import downloadmanager.zendesk.model.{CursorPage, ZendeskClientError}
 import zio.clock.Clock
 import zio.macros.accessible
 import zio.stm.{TMap, ZSTM}
-import zio.stream.ZStream
+import zio.stream.{Stream, ZStream}
 import zio.{Has, IO, Promise, ZIO, ZLayer}
 
 @accessible
@@ -29,7 +29,7 @@ object StreamApi {
         domain: String,
         startTime: Instant,
         token: String
-    ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
+    ): IO[StreamApiError, Stream[ZendeskClientError, CursorPage]]
 
     /**
       * Starts a stream, using a starting cursor.
@@ -39,7 +39,7 @@ object StreamApi {
         domain: String,
         cursor: String,
         token: String
-    ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, CursorPage]]
+    ): IO[StreamApiError, Stream[ZendeskClientError, CursorPage]]
 
     /**
       * Stops a running stream.
@@ -60,8 +60,8 @@ object StreamApi {
   type ShouldStop = Promise[ZendeskClientError, Unit]
   type DidStop    = Promise[ZendeskClientError, Unit]
 
-  val live = ZLayer
-    .fromServicesM((client: ZendeskClient.Service, config: AppConfig.ThrottleConfig) =>
+  val live = ZLayer.fromServicesM(
+    (client: ZendeskClient.Service, config: AppConfig.ThrottleConfig, clock: Clock.Service) =>
       // Implementation detail:
       // TMap is a Transactional Map, which we use to represent running streams.
       // We create a TMap which is keyed by domain, and value Tuple of Promises shouldStop, didStop.
@@ -100,7 +100,7 @@ object StreamApi {
                 domain: String,
                 initialRequest: S,
                 processRequest: S => IO[ZendeskClientError, Option[(A, S)]]
-            ): IO[StreamApiError, ZStream[Clock, ZendeskClientError, A]] = {
+            ): IO[StreamApiError, Stream[ZendeskClientError, A]] = {
               def alreadyStartedGuard =
                 ZSTM.whenM(runningStreams.contains(domain))(
                   ZSTM.fail(StreamApiError.AlreadyStarted(domain))
@@ -126,6 +126,7 @@ object StreamApi {
                     .ensuring(didStop.succeed(()) *> runningStreams.delete(domain).commit)
                     .haltWhen(shouldStop)
                     .throttleShape(config.count, config.duration.toJava)(_.size.toLong)
+                    .provide(Has(clock))
               }
 
             }
@@ -193,5 +194,5 @@ object StreamApi {
             }
           }
         )
-    )
+  )
 }
